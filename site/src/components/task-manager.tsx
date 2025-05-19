@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { PlusCircle, Calendar, CheckCircle2, Trash2, X } from "lucide-react"
+import { PlusCircle, Calendar, CheckCircle2, Trash2, X, Clock } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -32,14 +32,30 @@ type Task = {
     title: string
     completedDays: string[] // Track which days the task is completed
     days: string[]
+    time: string // Store time in 24h format (HH:MM)
 }
 
 const DAYS_OF_WEEK = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+
+// Format time for display (convert from 24h to 12h format if needed)
+const formatTimeForDisplay = (time: string) => {
+    if (!time) return ""
+
+    try {
+        const [hours, minutes] = time.split(":").map(Number)
+        const period = hours >= 12 ? "PM" : "AM"
+        const displayHours = hours % 12 || 12
+        return `${displayHours}:${minutes.toString().padStart(2, "0")} ${period}`
+    } catch (e) {
+        return time
+    }
+}
 
 export default function TaskManager() {
     const [tasks, setTasks] = useState<Task[]>([])
     const [newTask, setNewTask] = useState("")
     const [selectedDays, setSelectedDays] = useState<string[]>([])
+    const [timeInput, setTimeInput] = useState("09:00") // Default to 9:00
     const [selectedTab, setSelectedTab] = useState("")
     const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
     const [isFrequencyDialogOpen, setIsFrequencyDialogOpen] = useState(false)
@@ -65,13 +81,16 @@ export default function TaskManager() {
             // Convert old task format to new format if needed
             const parsedTasks = JSON.parse(savedTasks)
             const updatedTasks = parsedTasks.map((task: any) => {
-                if (!task.completedDays) {
-                    return {
-                        ...task,
-                        completedDays: task.completed ? [...task.days] : [],
-                    }
+                const newTask = {
+                    ...task,
+                    completedDays: task.completedDays || (task.completed ? [...task.days] : []),
+                    time: task.time || "09:00", // Default time for existing tasks
                 }
-                return task
+                // Remove old completed property if it exists
+                if (newTask.hasOwnProperty("completed")) {
+                    delete newTask.completed
+                }
+                return newTask
             })
             setTasks(updatedTasks)
         }
@@ -110,15 +129,18 @@ export default function TaskManager() {
             title: pendingTask,
             completedDays: [],
             days: [...selectedDays],
+            time: timeInput,
         }
 
         setTasks([...tasks, task])
         setPendingTask("")
+        setTimeInput("09:00") // Reset to default time
         setIsFrequencyDialogOpen(false)
     }
 
     const cancelAddTask = () => {
         setPendingTask("")
+        setTimeInput("09:00") // Reset to default time
         setIsFrequencyDialogOpen(false)
     }
 
@@ -185,6 +207,16 @@ export default function TaskManager() {
         return task.completedDays.includes(day)
     }
 
+    // Sort tasks by time
+    const getSortedTasksForDay = (day: string) => {
+        return tasks
+            .filter((task) => task.days.includes(day))
+            .sort((a, b) => {
+                // Sort by time (earlier times first)
+                return a.time.localeCompare(b.time)
+            })
+    }
+
     return (
         <Card className="w-full max-w-full overflow-hidden">
             <CardHeader className="flex flex-row items-center justify-between">
@@ -230,39 +262,43 @@ export default function TaskManager() {
                     {DAYS_OF_WEEK.map((day) => (
                         <TabsContent key={day} value={day} className="space-y-4">
                             <div className="space-y-2">
-                                {tasks
-                                    .filter((task) => task.days.includes(day))
-                                    .map((task) => (
-                                        <div key={task.id} className="flex items-center justify-between p-3 border rounded-md">
-                                            <div className="flex items-center">
-                                                <Button
-                                                    variant="ghost"
-                                                    size="icon"
-                                                    onClick={() => toggleTaskCompletion(task.id, day)}
-                                                    className="mr-2"
-                                                >
-                                                    <CheckCircle2
-                                                        className={`h-5 w-5 ${isTaskCompletedForDay(task, day) ? "text-green-500 fill-green-500" : "text-muted-foreground"}`}
-                                                    />
-                                                </Button>
-                                                <div>
+                                {getSortedTasksForDay(day).map((task) => (
+                                    <div key={task.id} className="flex items-center justify-between p-3 border rounded-md">
+                                        <div className="flex items-center">
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                onClick={() => toggleTaskCompletion(task.id, day)}
+                                                className="mr-2"
+                                            >
+                                                <CheckCircle2
+                                                    className={`h-5 w-5 ${isTaskCompletedForDay(task, day) ? "text-green-500 fill-green-500" : "text-muted-foreground"}`}
+                                                />
+                                            </Button>
+                                            <div>
+                                                <div className="flex items-center">
+                                                    <Clock className="h-4 w-4 mr-1 text-muted-foreground" />
+                                                    <span className="text-sm font-medium text-muted-foreground mr-2">
+                                                        {formatTimeForDisplay(task.time)}
+                                                    </span>
                                                     <span
                                                         className={isTaskCompletedForDay(task, day) ? "line-through text-muted-foreground" : ""}
                                                     >
                                                         {task.title}
                                                     </span>
-                                                    {task.days.length > 1 && (
-                                                        <div className="text-xs text-muted-foreground mt-1">
-                                                            Recurring: {task.days.map((d) => d.substring(0, 3)).join(", ")}
-                                                        </div>
-                                                    )}
                                                 </div>
+                                                {task.days.length > 1 && (
+                                                    <div className="text-xs text-muted-foreground mt-1">
+                                                        Recurring: {task.days.map((d) => d.substring(0, 3)).join(", ")}
+                                                    </div>
+                                                )}
                                             </div>
-                                            <Button variant="ghost" size="sm" onClick={() => initiateDeleteTask(task.id, day)}>
-                                                Delete
-                                            </Button>
                                         </div>
-                                    ))}
+                                        <Button variant="ghost" size="sm" onClick={() => initiateDeleteTask(task.id, day)}>
+                                            Delete
+                                        </Button>
+                                    </div>
+                                ))}
                                 {tasks.filter((task) => task.days.includes(day)).length === 0 && (
                                     <p className="text-center text-muted-foreground py-4">
                                         No tasks for {day}. Add some tasks to get started!
@@ -315,33 +351,54 @@ export default function TaskManager() {
             <Dialog open={isFrequencyDialogOpen} onOpenChange={setIsFrequencyDialogOpen}>
                 <DialogContent>
                     <DialogHeader>
-                        <DialogTitle>Set Task Frequency</DialogTitle>
-                        <DialogDescription>Select which days of the week this task should appear on.</DialogDescription>
+                        <DialogTitle>Set Task Details</DialogTitle>
+                        <DialogDescription>Enter time and select days for this task.</DialogDescription>
                     </DialogHeader>
 
-                    <div className="py-4">
-                        <div className="flex flex-wrap gap-3 mb-4">
-                            <Button size="sm" variant="outline" onClick={selectAllDays}>
-                                Select All
-                            </Button>
-                            <Button size="sm" variant="outline" onClick={clearSelectedDays}>
-                                Clear
-                            </Button>
+                    <div className="py-4 space-y-4">
+                        {/* Time input */}
+                        <div className="space-y-2">
+                            <label htmlFor="task-time" className="text-sm font-medium">
+                                Time
+                            </label>
+                            <Input
+                                id="task-time"
+                                type="time"
+                                value={timeInput}
+                                onChange={(e) => setTimeInput(e.target.value)}
+                                className="w-full"
+                            />
+                            <p className="text-xs text-muted-foreground">Enter time in 24-hour format (HH:MM)</p>
                         </div>
 
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                            {DAYS_OF_WEEK.map((day) => (
-                                <div key={day} className="flex items-center space-x-2">
-                                    <Checkbox
-                                        id={`freq-day-${day}`}
-                                        checked={selectedDays.includes(day)}
-                                        onCheckedChange={() => toggleDaySelection(day)}
-                                    />
-                                    <label htmlFor={`freq-day-${day}`} className="text-sm cursor-pointer">
-                                        {day}
-                                    </label>
+                        {/* Day selection */}
+                        <div className="space-y-2">
+                            <div className="flex items-center justify-between">
+                                <label className="text-sm font-medium">Days</label>
+                                <div className="flex gap-2">
+                                    <Button size="sm" variant="outline" onClick={selectAllDays}>
+                                        Select All
+                                    </Button>
+                                    <Button size="sm" variant="outline" onClick={clearSelectedDays}>
+                                        Clear
+                                    </Button>
                                 </div>
-                            ))}
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
+                                {DAYS_OF_WEEK.map((day) => (
+                                    <div key={day} className="flex items-center space-x-2">
+                                        <Checkbox
+                                            id={`freq-day-${day}`}
+                                            checked={selectedDays.includes(day)}
+                                            onCheckedChange={() => toggleDaySelection(day)}
+                                        />
+                                        <label htmlFor={`freq-day-${day}`} className="text-sm cursor-pointer">
+                                            {day}
+                                        </label>
+                                    </div>
+                                ))}
+                            </div>
                         </div>
                     </div>
 
