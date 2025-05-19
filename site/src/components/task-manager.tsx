@@ -43,7 +43,7 @@ type LegacyTask = {
     completedDays?: string[]
     days: string[]
     time?: string
-    [key: string]: any // Allow for any other properties that might exist
+    // Remove the [key: string]: any index signature
 }
 
 const DAYS_OF_WEEK = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
@@ -90,21 +90,48 @@ export default function TaskManager() {
     useEffect(() => {
         const savedTasks = localStorage.getItem("weeklyTasks")
         if (savedTasks) {
-            // Convert old task format to new format if needed
-            const parsedTasks = JSON.parse(savedTasks) as LegacyTask[]
-            const updatedTasks = parsedTasks.map((task) => {
-                // Create a new task object with the correct structure
-                const newTask: Task = {
-                    id: task.id,
-                    title: task.title,
-                    completedDays: task.completedDays || (task.completed ? [...task.days] : []),
-                    days: [...task.days],
-                    time: task.time || "09:00", // Default time for existing tasks
+            try {
+                // Parse the saved tasks
+                const parsedTasks = JSON.parse(savedTasks) as unknown
+
+                // Ensure parsedTasks is an array
+                if (!Array.isArray(parsedTasks)) {
+                    console.error("Saved tasks is not an array")
+                    return
                 }
 
-                return newTask
-            })
-            setTasks(updatedTasks)
+                // Convert old task format to new format
+                const updatedTasks: Task[] = parsedTasks
+                    .map((rawTask) => {
+                        // Validate the task has the minimum required properties
+                        const task = rawTask as LegacyTask
+                        if (!task.id || !task.title || !Array.isArray(task.days)) {
+                            // Skip invalid tasks
+                            console.warn("Skipping invalid task:", task)
+                            return null
+                        }
+
+                        // Create a new task with the correct structure
+                        return {
+                            id: task.id,
+                            title: task.title,
+                            completedDays: Array.isArray(task.completedDays)
+                                ? [...task.completedDays]
+                                : task.completed
+                                    ? [...task.days]
+                                    : [],
+                            days: [...task.days],
+                            time: typeof task.time === "string" ? task.time : "09:00", // Default time for existing tasks
+                        }
+                    })
+                    .filter((task): task is Task => task !== null)
+
+                setTasks(updatedTasks)
+            } catch (error) {
+                console.error("Error parsing saved tasks:", error)
+                // If there's an error parsing, start with empty tasks
+                setTasks([])
+            }
         }
     }, [])
 
