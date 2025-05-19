@@ -89,6 +89,7 @@ export default function TaskManager() {
     const [isEditingTask, setIsEditingTask] = useState(false)
     const [editedTitle, setEditedTitle] = useState("")
     const [editedDescription, setEditedDescription] = useState("")
+    const [editedTime, setEditedTime] = useState("09:00")
 
     // Get current day of week and set as default tab
     useEffect(() => {
@@ -229,6 +230,7 @@ export default function TaskManager() {
         setSelectedTaskDetails(task)
         setEditedTitle(task.title)
         setEditedDescription(task.description || "")
+        setEditedTime(task.time)
         setIsEditingTask(false)
         setIsTaskDetailsDialogOpen(true)
     }
@@ -250,6 +252,7 @@ export default function TaskManager() {
                         ...task,
                         title: editedTitle.trim(),
                         description: editedDescription.trim() || undefined,
+                        time: editedTime,
                     }
                 }
                 return task
@@ -261,6 +264,7 @@ export default function TaskManager() {
             ...selectedTaskDetails,
             title: editedTitle.trim(),
             description: editedDescription.trim() || undefined,
+            time: editedTime,
         })
 
         setIsEditingTask(false)
@@ -271,6 +275,7 @@ export default function TaskManager() {
         if (!selectedTaskDetails) return
         setEditedTitle(selectedTaskDetails.title)
         setEditedDescription(selectedTaskDetails.description || "")
+        setEditedTime(selectedTaskDetails.time)
         setIsEditingTask(false)
     }
 
@@ -506,10 +511,25 @@ export default function TaskManager() {
                         ) : (
                             <DialogTitle>{selectedTaskDetails?.title}</DialogTitle>
                         )}
-                        <DialogDescription>
-                            {formatTimeForDisplay(selectedTaskDetails?.time || "")} •
-                            {selectedTaskDetails?.days.map((d) => ` ${d.substring(0, 3)}`).join(",")}
-                        </DialogDescription>
+                        {isEditingTask ? (
+                            <div className="mt-2">
+                                <label htmlFor="task-time-edit" className="text-sm font-medium">
+                                    Time
+                                </label>
+                                <Input
+                                    id="task-time-edit"
+                                    type="time"
+                                    value={editedTime}
+                                    onChange={(e) => setEditedTime(e.target.value)}
+                                    className="w-full mt-1"
+                                />
+                            </div>
+                        ) : (
+                            <DialogDescription>
+                                {formatTimeForDisplay(selectedTaskDetails?.time || "")} •
+                                {selectedTaskDetails?.days.map((d) => ` ${d.substring(0, 3)}`).join(",")}
+                            </DialogDescription>
+                        )}
                     </DialogHeader>
 
                     <div className="py-4">
