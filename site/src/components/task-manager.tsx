@@ -29,6 +29,8 @@ import {
     DialogTitle,
 } from "@/components/ui/dialog"
 import { Textarea } from "@/components/ui/textarea"
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
+import { Label } from "@/components/ui/label"
 
 type Task = {
     id: string
@@ -90,6 +92,8 @@ export default function TaskManager() {
     const [editedTitle, setEditedTitle] = useState("")
     const [editedDescription, setEditedDescription] = useState("")
     const [editedTime, setEditedTime] = useState("09:00")
+    const [updateScope, setUpdateScope] = useState<"current" | "all">("all")
+    const [currentViewDay, setCurrentViewDay] = useState<string>("")
 
     // Get current day of week and set as default tab
     useEffect(() => {
@@ -99,8 +103,14 @@ export default function TaskManager() {
         const adjustedIndex = dayIndex === 0 ? 6 : dayIndex - 1
         const currentDay = DAYS_OF_WEEK[adjustedIndex]
         setSelectedTab(currentDay)
+        setCurrentViewDay(currentDay)
         setSelectedDays([currentDay]) // Also set as default selected day for new tasks
     }, [])
+
+    // Update current view day when tab changes
+    useEffect(() => {
+        setCurrentViewDay(selectedTab)
+    }, [selectedTab])
 
     // Load tasks from localStorage on component mount
     useEffect(() => {
@@ -231,6 +241,7 @@ export default function TaskManager() {
         setEditedTitle(task.title)
         setEditedDescription(task.description || "")
         setEditedTime(task.time)
+        setUpdateScope("all") // Default to updating all occurrences
         setIsEditingTask(false)
         setIsTaskDetailsDialogOpen(true)
     }
@@ -245,27 +256,81 @@ export default function TaskManager() {
     const saveEditedTask = () => {
         if (!selectedTaskDetails || !editedTitle.trim()) return
 
-        setTasks(
-            tasks.map((task) => {
-                if (task.id === selectedTaskDetails.id) {
-                    return {
-                        ...task,
-                        title: editedTitle.trim(),
-                        description: editedDescription.trim() || undefined,
-                        time: editedTime,
+        if (updateScope === "all") {
+            // Update task for all days
+            setTasks(
+                tasks.map((task) => {
+                    if (task.id === selectedTaskDetails.id) {
+                        return {
+                            ...task,
+                            title: editedTitle.trim(),
+                            description: editedDescription.trim() || undefined,
+                            time: editedTime,
+                        }
                     }
-                }
-                return task
-            }),
-        )
+                    return task
+                }),
+            )
 
-        // Update the selected task details
-        setSelectedTaskDetails({
-            ...selectedTaskDetails,
-            title: editedTitle.trim(),
-            description: editedDescription.trim() || undefined,
-            time: editedTime,
-        })
+            // Update the selected task details
+            setSelectedTaskDetails({
+                ...selectedTaskDetails,
+                title: editedTitle.trim(),
+                description: editedDescription.trim() || undefined,
+                time: editedTime,
+            })
+        } else {
+            // Update task only for the current day
+            // First, find the original task
+            const originalTask = tasks.find((task) => task.id === selectedTaskDetails.id)
+
+            if (!originalTask) return
+
+            // If the task only appears on this day, just update it
+            if (originalTask.days.length === 1) {
+                setTasks(
+                    tasks.map((task) => {
+                        if (task.id === selectedTaskDetails.id) {
+                            return {
+                                ...task,
+                                title: editedTitle.trim(),
+                                description: editedDescription.trim() || undefined,
+                                time: editedTime,
+                            }
+                        }
+                        return task
+                    }),
+                )
+            } else {
+                // Create a new task for this specific day
+                const newTask: Task = {
+                    id: Date.now().toString(),
+                    title: editedTitle.trim(),
+                    description: editedDescription.trim() || undefined,
+                    completedDays: originalTask.completedDays.includes(currentViewDay) ? [currentViewDay] : [],
+                    days: [currentViewDay],
+                    time: editedTime,
+                }
+
+                // Remove the current day from the original task
+                const updatedTasks = tasks.map((task) => {
+                    if (task.id === selectedTaskDetails.id) {
+                        return {
+                            ...task,
+                            days: task.days.filter((day) => day !== currentViewDay),
+                            completedDays: task.completedDays.filter((day) => day !== currentViewDay),
+                        }
+                    }
+                    return task
+                })
+
+                // Add the new task
+                setTasks([...updatedTasks, newTask])
+
+                // Update the selected task details to the new task
+                setSelectedTaskDetails(newTask)
+            }
+        }
 
         setIsEditingTask(false)
     }
@@ -276,6 +341,7 @@ export default function TaskManager() {
         setEditedTitle(selectedTaskDetails.title)
         setEditedDescription(selectedTaskDetails.description || "")
         setEditedTime(selectedTaskDetails.time)
+        setUpdateScope("all") // Reset to default
         setIsEditingTask(false)
     }
 
@@ -534,18 +600,39 @@ export default function TaskManager() {
 
                     <div className="py-4">
                         {isEditingTask ? (
-                            <div className="space-y-2">
-                                <label htmlFor="task-description-edit" className="text-sm font-medium">
-                                    Description (optional)
-                                </label>
-                                <Textarea
-                                    id="task-description-edit"
-                                    placeholder="Add details about this task..."
-                                    value={editedDescription}
-                                    onChange={(e) => setEditedDescription(e.target.value)}
-                                    className="w-full resize-none"
-                                    rows={5}
-                                />
+                            <div className="space-y-4">
+                                <div className="space-y-2">
+                                    <label htmlFor="task-description-edit" className="text-sm font-medium">
+                                        Description (optional)
+                                    </label>
+                                    <Textarea
+                                        id="task-description-edit"
+                                        placeholder="Add details about this task..."
+                                        value={editedDescription}
+                                        onChange={(e) => setEditedDescription(e.target.value)}
+                                        className="w-full resize-none"
+                                        rows={5}
+                                    />
+                                </div>
+
+                                {selectedTaskDetails && selectedTaskDetails.days.length > 1 && (
+                                    <div className="space-y-2 pt-2 border-t">
+                                        <label className="text-sm font-medium">Update scope</label>
+                                        <RadioGroup
+                                            value={updateScope}
+                                            onValueChange={(value) => setUpdateScope(value as "current" | "all")}
+                                        >
+                                            <div className="flex items-center space-x-2">
+                                                <RadioGroupItem value="current" id="update-current" />
+                                                <Label htmlFor="update-current">Update only for {currentViewDay}</Label>
+                                            </div>
+                                            <div className="flex items-center space-x-2">
+                                                <RadioGroupItem value="all" id="update-all" />
+                                                <Label htmlFor="update-all">Update for all days ({selectedTaskDetails.days.length} days)</Label>
+                                            </div>
+                                        </RadioGroup>
+                                    </div>
+                                )}
                             </div>
                         ) : selectedTaskDetails?.description ? (
                             <div className="space-y-2">
