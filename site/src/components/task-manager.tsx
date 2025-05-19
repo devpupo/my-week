@@ -46,7 +46,8 @@ const formatTimeForDisplay = (time: string) => {
         const period = hours >= 12 ? "PM" : "AM"
         const displayHours = hours % 12 || 12
         return `${displayHours}:${minutes.toString().padStart(2, "0")} ${period}`
-    } catch (e) {
+    } catch {
+        // Remove the unused 'e' parameter
         return time
     }
 }
@@ -80,18 +81,27 @@ export default function TaskManager() {
         if (savedTasks) {
             // Convert old task format to new format if needed
             const parsedTasks = JSON.parse(savedTasks)
-            const updatedTasks = parsedTasks.map((task: any) => {
-                const newTask = {
-                    ...task,
-                    completedDays: task.completedDays || (task.completed ? [...task.days] : []),
-                    time: task.time || "09:00", // Default time for existing tasks
-                }
-                // Remove old completed property if it exists
-                if (newTask.hasOwnProperty("completed")) {
-                    delete newTask.completed
-                }
-                return newTask
-            })
+            const updatedTasks = parsedTasks.map(
+                (task: {
+                    id: string
+                    title: string
+                    completed?: boolean
+                    completedDays?: string[]
+                    days: string[]
+                    time?: string
+                }) => {
+                    const newTask = {
+                        ...task,
+                        completedDays: task.completedDays || (task.completed ? [...task.days] : []),
+                        time: task.time || "09:00", // Default time for existing tasks
+                    }
+                    // Remove old completed property if it exists
+                    if (newTask.hasOwnProperty("completed")) {
+                        delete (newTask as any).completed
+                    }
+                    return newTask
+                },
+            )
             setTasks(updatedTasks)
         }
     }, [])
@@ -334,7 +344,7 @@ export default function TaskManager() {
                     <AlertDialogHeader>
                         <AlertDialogTitle>Remove task for this day?</AlertDialogTitle>
                         <AlertDialogDescription>
-                            This will remove the task only for {taskToDelete?.day}. The task will remain on other days if it's
+                            This will remove the task only for {taskToDelete?.day}. The task will remain on other days if it&apos;s
                             recurring.
                         </AlertDialogDescription>
                     </AlertDialogHeader>
