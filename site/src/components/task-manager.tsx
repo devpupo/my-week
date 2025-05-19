@@ -35,6 +35,17 @@ type Task = {
     time: string // Store time in 24h format (HH:MM)
 }
 
+// Type for legacy task format that might be in localStorage
+type LegacyTask = {
+    id: string
+    title: string
+    completed?: boolean
+    completedDays?: string[]
+    days: string[]
+    time?: string
+    [key: string]: any // Allow for any other properties that might exist
+}
+
 const DAYS_OF_WEEK = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 
 // Format time for display (convert from 24h to 12h format if needed)
@@ -80,28 +91,19 @@ export default function TaskManager() {
         const savedTasks = localStorage.getItem("weeklyTasks")
         if (savedTasks) {
             // Convert old task format to new format if needed
-            const parsedTasks = JSON.parse(savedTasks)
-            const updatedTasks = parsedTasks.map(
-                (task: {
-                    id: string
-                    title: string
-                    completed?: boolean
-                    completedDays?: string[]
-                    days: string[]
-                    time?: string
-                }) => {
-                    const newTask = {
-                        ...task,
-                        completedDays: task.completedDays || (task.completed ? [...task.days] : []),
-                        time: task.time || "09:00", // Default time for existing tasks
-                    }
-                    // Remove old completed property if it exists
-                    if (newTask.hasOwnProperty("completed")) {
-                        delete (newTask as any).completed
-                    }
-                    return newTask
-                },
-            )
+            const parsedTasks = JSON.parse(savedTasks) as LegacyTask[]
+            const updatedTasks = parsedTasks.map((task) => {
+                // Create a new task object with the correct structure
+                const newTask: Task = {
+                    id: task.id,
+                    title: task.title,
+                    completedDays: task.completedDays || (task.completed ? [...task.days] : []),
+                    days: [...task.days],
+                    time: task.time || "09:00", // Default time for existing tasks
+                }
+
+                return newTask
+            })
             setTasks(updatedTasks)
         }
     }, [])
