@@ -116,31 +116,37 @@ export default function TaskManager() {
                 }
 
                 // Convert old task format to new format
-                const updatedTasks: Task[] = parsedTasks
-                    .map((rawTask) => {
-                        // Validate the task has the minimum required properties
-                        const task = rawTask as LegacyTask
-                        if (!task.id || !task.title || !Array.isArray(task.days)) {
-                            // Skip invalid tasks
-                            console.warn("Skipping invalid task:", task)
-                            return null
-                        }
+                const updatedTasks: Task[] = []
 
-                        // Create a new task with the correct structure
-                        return {
-                            id: task.id,
-                            title: task.title,
-                            description: typeof task.description === "string" ? task.description : undefined,
-                            completedDays: Array.isArray(task.completedDays)
-                                ? [...task.completedDays]
-                                : task.completed
-                                    ? [...task.days]
-                                    : [],
-                            days: [...task.days],
-                            time: typeof task.time === "string" ? task.time : "09:00", // Default time for existing tasks
-                        }
+                for (const rawTask of parsedTasks) {
+                    // Skip if not an object
+                    if (!rawTask || typeof rawTask !== "object") {
+                        continue
+                    }
+
+                    // Cast to LegacyTask to access properties
+                    const task = rawTask as LegacyTask
+
+                    // Validate the task has the minimum required properties
+                    if (!task.id || !task.title || !Array.isArray(task.days)) {
+                        console.warn("Skipping invalid task:", task)
+                        continue
+                    }
+
+                    // Create a new task with the correct structure
+                    updatedTasks.push({
+                        id: task.id,
+                        title: task.title,
+                        description: typeof task.description === "string" ? task.description : undefined,
+                        completedDays: Array.isArray(task.completedDays)
+                            ? [...task.completedDays]
+                            : task.completed
+                                ? [...task.days]
+                                : [],
+                        days: [...task.days],
+                        time: typeof task.time === "string" ? task.time : "09:00", // Default time for existing tasks
                     })
-                    .filter((task): task is Task => task !== null)
+                }
 
                 setTasks(updatedTasks)
             } catch (error) {
