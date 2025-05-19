@@ -283,27 +283,29 @@ export default function TaskManager() {
 
         const { id, day } = taskToDelete
 
-        setTasks(
-            tasks
-                .map((task) => {
-                    if (task.id === id) {
-                        // If task only appears on this day, remove it completely
-                        if (task.days.length === 1) {
-                            return null
-                        }
+        // Create a new array of tasks with the specified task removed or modified
+        const updatedTasks: Task[] = []
 
-                        // Otherwise, remove this day from the task's days
-                        return {
-                            ...task,
-                            days: task.days.filter((d) => d !== day),
-                            completedDays: task.completedDays.filter((d) => d !== day),
-                        }
-                    }
-                    return task
+        for (const task of tasks) {
+            if (task.id === id) {
+                // If task only appears on this day, skip it (remove it)
+                if (task.days.length === 1) {
+                    continue
+                }
+
+                // Otherwise, remove this day from the task's days
+                updatedTasks.push({
+                    ...task,
+                    days: task.days.filter((d) => d !== day),
+                    completedDays: task.completedDays.filter((d) => d !== day),
                 })
-                .filter(Boolean) as Task[],
-        )
+            } else {
+                // Keep other tasks unchanged
+                updatedTasks.push(task)
+            }
+        }
 
+        setTasks(updatedTasks)
         setIsDeleteTaskDialogOpen(false)
         setTaskToDelete(null)
     }
