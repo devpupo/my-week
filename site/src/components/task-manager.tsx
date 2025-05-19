@@ -30,7 +30,7 @@ import {
 type Task = {
     id: string
     title: string
-    completed: boolean
+    completedDays: string[] // Track which days the task is completed
     days: string[]
 }
 
@@ -44,6 +44,8 @@ export default function TaskManager() {
     const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
     const [isFrequencyDialogOpen, setIsFrequencyDialogOpen] = useState(false)
     const [pendingTask, setPendingTask] = useState("")
+    const [taskToDelete, setTaskToDelete] = useState<{ id: string; day: string } | null>(null)
+    const [isDeleteTaskDialogOpen, setIsDeleteTaskDialogOpen] = useState(false)
 
     // Get current day of week and set as default tab
     useEffect(() => {
@@ -60,7 +62,18 @@ export default function TaskManager() {
     useEffect(() => {
         const savedTasks = localStorage.getItem("weeklyTasks")
         if (savedTasks) {
-            setTasks(JSON.parse(savedTasks))
+            // Convert old task format to new format if needed
+            const parsedTasks = JSON.parse(savedTasks)
+            const updatedTasks = parsedTasks.map((task: any) => {
+                if (!task.completedDays) {
+                    return {
+                        ...task,
+                        completedDays: task.completed ? [...task.days] : [],
+                    }
+                }
+                return task
+            })
+            setTasks(updatedTasks)
         }
     }, [])
 
@@ -95,7 +108,7 @@ export default function TaskManager() {
         const task: Task = {
             id: Date.now().toString(),
             title: pendingTask,
-            completed: false,
+            completedDays: [],
             days: [...selectedDays],
         }
 
@@ -109,17 +122,67 @@ export default function TaskManager() {
         setIsFrequencyDialogOpen(false)
     }
 
-    const toggleTaskCompletion = (taskId: string) => {
-        setTasks(tasks.map((task) => (task.id === taskId ? { ...task, completed: !task.completed } : task)))
+    // Toggle task completion for a specific day
+    const toggleTaskCompletion = (taskId: string, day: string) => {
+        setTasks(
+            tasks.map((task) => {
+                if (task.id === taskId) {
+                    const newCompletedDays = task.completedDays.includes(day)
+                        ? task.completedDays.filter((d) => d !== day)
+                        : [...task.completedDays, day]
+
+                    return { ...task, completedDays: newCompletedDays }
+                }
+                return task
+            }),
+        )
     }
 
-    const deleteTask = (taskId: string) => {
-        setTasks(tasks.filter((task) => task.id !== taskId))
+    // Initiate delete task for a specific day
+    const initiateDeleteTask = (taskId: string, day: string) => {
+        setTaskToDelete({ id: taskId, day })
+        setIsDeleteTaskDialogOpen(true)
+    }
+
+    // Delete task for a specific day
+    const confirmDeleteTask = () => {
+        if (!taskToDelete) return
+
+        const { id, day } = taskToDelete
+
+        setTasks(
+            tasks
+                .map((task) => {
+                    if (task.id === id) {
+                        // If task only appears on this day, remove it completely
+                        if (task.days.length === 1) {
+                            return null
+                        }
+
+                        // Otherwise, remove this day from the task's days
+                        return {
+                            ...task,
+                            days: task.days.filter((d) => d !== day),
+                            completedDays: task.completedDays.filter((d) => d !== day),
+                        }
+                    }
+                    return task
+                })
+                .filter(Boolean) as Task[],
+        )
+
+        setIsDeleteTaskDialogOpen(false)
+        setTaskToDelete(null)
     }
 
     const deleteAllTasksForWeek = () => {
         setTasks([])
         setIsDeleteDialogOpen(false)
+    }
+
+    // Check if a task is completed for a specific day
+    const isTaskCompletedForDay = (task: Task, day: string) => {
+        return task.completedDays.includes(day)
     }
 
     return (
@@ -175,15 +238,17 @@ export default function TaskManager() {
                                                 <Button
                                                     variant="ghost"
                                                     size="icon"
-                                                    onClick={() => toggleTaskCompletion(task.id)}
+                                                    onClick={() => toggleTaskCompletion(task.id, day)}
                                                     className="mr-2"
                                                 >
                                                     <CheckCircle2
-                                                        className={`h-5 w-5 ${task.completed ? "text-green-500 fill-green-500" : "text-muted-foreground"}`}
+                                                        className={`h-5 w-5 ${isTaskCompletedForDay(task, day) ? "text-green-500 fill-green-500" : "text-muted-foreground"}`}
                                                     />
                                                 </Button>
                                                 <div>
-                                                    <span className={task.completed ? "line-through text-muted-foreground" : ""}>
+                                                    <span
+                                                        className={isTaskCompletedForDay(task, day) ? "line-through text-muted-foreground" : ""}
+                                                    >
                                                         {task.title}
                                                     </span>
                                                     {task.days.length > 1 && (
@@ -193,7 +258,7 @@ export default function TaskManager() {
                                                     )}
                                                 </div>
                                             </div>
-                                            <Button variant="ghost" size="sm" onClick={() => deleteTask(task.id)}>
+                                            <Button variant="ghost" size="sm" onClick={() => initiateDeleteTask(task.id, day)}>
                                                 Delete
                                             </Button>
                                         </div>
@@ -222,6 +287,25 @@ export default function TaskManager() {
                         <AlertDialogCancel>Cancel</AlertDialogCancel>
                         <AlertDialogAction onClick={deleteAllTasksForWeek} className="bg-red-600 hover:bg-red-700">
                             Delete All
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+
+            {/* Delete Task for Specific Day Dialog */}
+            <AlertDialog open={isDeleteTaskDialogOpen} onOpenChange={setIsDeleteTaskDialogOpen}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Remove task for this day?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            This will remove the task only for {taskToDelete?.day}. The task will remain on other days if it's
+                            recurring.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel onClick={() => setTaskToDelete(null)}>Cancel</AlertDialogCancel>
+                        <AlertDialogAction onClick={confirmDeleteTask} className="bg-red-600 hover:bg-red-700">
+                            Remove
                         </AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>
