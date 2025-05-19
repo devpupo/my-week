@@ -1,7 +1,9 @@
 "use client"
 
+import type React from "react"
+
 import { useState, useEffect } from "react"
-import { PlusCircle, Calendar, CheckCircle2, Trash2, X, Clock } from "lucide-react"
+import { PlusCircle, Calendar, CheckCircle2, Trash2, X, Clock, AlignLeft, Pencil, Save } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -26,10 +28,12 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog"
+import { Textarea } from "@/components/ui/textarea"
 
 type Task = {
     id: string
     title: string
+    description?: string // Optional description field
     completedDays: string[] // Track which days the task is completed
     days: string[]
     time: string // Store time in 24h format (HH:MM)
@@ -39,11 +43,11 @@ type Task = {
 type LegacyTask = {
     id: string
     title: string
+    description?: string
     completed?: boolean
     completedDays?: string[]
     days: string[]
     time?: string
-    // Remove the [key: string]: any index signature
 }
 
 const DAYS_OF_WEEK = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
@@ -58,14 +62,20 @@ const formatTimeForDisplay = (time: string) => {
         const displayHours = hours % 12 || 12
         return `${displayHours}:${minutes.toString().padStart(2, "0")} ${period}`
     } catch {
-        // Remove the unused 'e' parameter
         return time
     }
+}
+
+// Truncate text to a certain length
+const truncateText = (text: string, maxLength: number) => {
+    if (!text || text.length <= maxLength) return text
+    return text.substring(0, maxLength) + "..."
 }
 
 export default function TaskManager() {
     const [tasks, setTasks] = useState<Task[]>([])
     const [newTask, setNewTask] = useState("")
+    const [taskDescription, setTaskDescription] = useState("")
     const [selectedDays, setSelectedDays] = useState<string[]>([])
     const [timeInput, setTimeInput] = useState("09:00") // Default to 9:00
     const [selectedTab, setSelectedTab] = useState("")
@@ -74,6 +84,11 @@ export default function TaskManager() {
     const [pendingTask, setPendingTask] = useState("")
     const [taskToDelete, setTaskToDelete] = useState<{ id: string; day: string } | null>(null)
     const [isDeleteTaskDialogOpen, setIsDeleteTaskDialogOpen] = useState(false)
+    const [selectedTaskDetails, setSelectedTaskDetails] = useState<Task | null>(null)
+    const [isTaskDetailsDialogOpen, setIsTaskDetailsDialogOpen] = useState(false)
+    const [isEditingTask, setIsEditingTask] = useState(false)
+    const [editedTitle, setEditedTitle] = useState("")
+    const [editedDescription, setEditedDescription] = useState("")
 
     // Get current day of week and set as default tab
     useEffect(() => {
@@ -115,6 +130,7 @@ export default function TaskManager() {
                         return {
                             id: task.id,
                             title: task.title,
+                            description: typeof task.description === "string" ? task.description : undefined,
                             completedDays: Array.isArray(task.completedDays)
                                 ? [...task.completedDays]
                                 : task.completed
@@ -166,6 +182,7 @@ export default function TaskManager() {
         const task: Task = {
             id: Date.now().toString(),
             title: pendingTask,
+            description: taskDescription.trim() || undefined,
             completedDays: [],
             days: [...selectedDays],
             time: timeInput,
@@ -173,12 +190,14 @@ export default function TaskManager() {
 
         setTasks([...tasks, task])
         setPendingTask("")
+        setTaskDescription("")
         setTimeInput("09:00") // Reset to default time
         setIsFrequencyDialogOpen(false)
     }
 
     const cancelAddTask = () => {
         setPendingTask("")
+        setTaskDescription("")
         setTimeInput("09:00") // Reset to default time
         setIsFrequencyDialogOpen(false)
     }
@@ -199,8 +218,61 @@ export default function TaskManager() {
         )
     }
 
+    // Show task details dialog
+    const showTaskDetails = (task: Task) => {
+        setSelectedTaskDetails(task)
+        setEditedTitle(task.title)
+        setEditedDescription(task.description || "")
+        setIsEditingTask(false)
+        setIsTaskDetailsDialogOpen(true)
+    }
+
+    // Start editing task
+    const startEditingTask = () => {
+        if (!selectedTaskDetails) return
+        setIsEditingTask(true)
+    }
+
+    // Save edited task
+    const saveEditedTask = () => {
+        if (!selectedTaskDetails || !editedTitle.trim()) return
+
+        setTasks(
+            tasks.map((task) => {
+                if (task.id === selectedTaskDetails.id) {
+                    return {
+                        ...task,
+                        title: editedTitle.trim(),
+                        description: editedDescription.trim() || undefined,
+                    }
+                }
+                return task
+            }),
+        )
+
+        // Update the selected task details
+        setSelectedTaskDetails({
+            ...selectedTaskDetails,
+            title: editedTitle.trim(),
+            description: editedDescription.trim() || undefined,
+        })
+
+        setIsEditingTask(false)
+    }
+
+    // Cancel editing task
+    const cancelEditingTask = () => {
+        if (!selectedTaskDetails) return
+        setEditedTitle(selectedTaskDetails.title)
+        setEditedDescription(selectedTaskDetails.description || "")
+        setIsEditingTask(false)
+    }
+
     // Initiate delete task for a specific day
-    const initiateDeleteTask = (taskId: string, day: string) => {
+    const initiateDeleteTask = (taskId: string, day: string, event: React.MouseEvent) => {
+        // Stop event propagation to prevent opening the task details dialog
+        event.stopPropagation()
+
         setTaskToDelete({ id: taskId, day })
         setIsDeleteTaskDialogOpen(true)
     }
@@ -256,6 +328,14 @@ export default function TaskManager() {
             })
     }
 
+    // Handle task details dialog close
+    const handleTaskDetailsDialogClose = (open: boolean) => {
+        if (!open) {
+            setIsEditingTask(false)
+        }
+        setIsTaskDetailsDialogOpen(open)
+    }
+
     return (
         <Card className="w-full max-w-full overflow-hidden">
             <CardHeader className="flex flex-row items-center justify-between">
@@ -302,38 +382,56 @@ export default function TaskManager() {
                         <TabsContent key={day} value={day} className="space-y-4">
                             <div className="space-y-2">
                                 {getSortedTasksForDay(day).map((task) => (
-                                    <div key={task.id} className="flex items-center justify-between p-3 border rounded-md">
-                                        <div className="flex items-center">
+                                    <div
+                                        key={task.id}
+                                        className="flex items-center justify-between p-3 border rounded-md cursor-pointer hover:bg-accent/50 transition-colors"
+                                        onClick={() => showTaskDetails(task)}
+                                    >
+                                        <div className="flex items-center max-w-[calc(100%-80px)]">
                                             <Button
                                                 variant="ghost"
                                                 size="icon"
-                                                onClick={() => toggleTaskCompletion(task.id, day)}
-                                                className="mr-2"
+                                                onClick={(e) => {
+                                                    e.stopPropagation() // Prevent opening task details
+                                                    toggleTaskCompletion(task.id, day)
+                                                }}
+                                                className="mr-2 flex-shrink-0"
                                             >
                                                 <CheckCircle2
                                                     className={`h-5 w-5 ${isTaskCompletedForDay(task, day) ? "text-green-500 fill-green-500" : "text-muted-foreground"}`}
                                                 />
                                             </Button>
-                                            <div>
+                                            <div className="min-w-0">
                                                 <div className="flex items-center">
-                                                    <Clock className="h-4 w-4 mr-1 text-muted-foreground" />
-                                                    <span className="text-sm font-medium text-muted-foreground mr-2">
+                                                    <Clock className="h-4 w-4 mr-1 text-muted-foreground flex-shrink-0" />
+                                                    <span className="text-sm font-medium text-muted-foreground mr-2 flex-shrink-0">
                                                         {formatTimeForDisplay(task.time)}
                                                     </span>
                                                     <span
-                                                        className={isTaskCompletedForDay(task, day) ? "line-through text-muted-foreground" : ""}
+                                                        className={`truncate ${isTaskCompletedForDay(task, day) ? "line-through text-muted-foreground" : ""}`}
                                                     >
-                                                        {task.title}
+                                                        {truncateText(task.title, 30)}
                                                     </span>
                                                 </div>
                                                 {task.days.length > 1 && (
-                                                    <div className="text-xs text-muted-foreground mt-1">
+                                                    <div className="text-xs text-muted-foreground mt-1 truncate">
                                                         Recurring: {task.days.map((d) => d.substring(0, 3)).join(", ")}
+                                                    </div>
+                                                )}
+                                                {task.description && (
+                                                    <div className="flex items-center text-xs text-muted-foreground mt-1">
+                                                        <AlignLeft className="h-3 w-3 mr-1" />
+                                                        <span>Has description</span>
                                                     </div>
                                                 )}
                                             </div>
                                         </div>
-                                        <Button variant="ghost" size="sm" onClick={() => initiateDeleteTask(task.id, day)}>
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={(e) => initiateDeleteTask(task.id, day, e)}
+                                            className="flex-shrink-0"
+                                        >
                                             Delete
                                         </Button>
                                     </div>
@@ -386,12 +484,84 @@ export default function TaskManager() {
                 </AlertDialogContent>
             </AlertDialog>
 
+            {/* Task Details Dialog */}
+            <Dialog open={isTaskDetailsDialogOpen} onOpenChange={handleTaskDetailsDialogClose}>
+                <DialogContent>
+                    <DialogHeader>
+                        {isEditingTask ? (
+                            <Input
+                                value={editedTitle}
+                                onChange={(e) => setEditedTitle(e.target.value)}
+                                className="text-lg font-semibold"
+                                placeholder="Task title"
+                            />
+                        ) : (
+                            <DialogTitle>{selectedTaskDetails?.title}</DialogTitle>
+                        )}
+                        <DialogDescription>
+                            {formatTimeForDisplay(selectedTaskDetails?.time || "")} •
+                            {selectedTaskDetails?.days.map((d) => ` ${d.substring(0, 3)}`).join(",")}
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    <div className="py-4">
+                        {isEditingTask ? (
+                            <div className="space-y-2">
+                                <label htmlFor="task-description-edit" className="text-sm font-medium">
+                                    Description (optional)
+                                </label>
+                                <Textarea
+                                    id="task-description-edit"
+                                    placeholder="Add details about this task..."
+                                    value={editedDescription}
+                                    onChange={(e) => setEditedDescription(e.target.value)}
+                                    className="w-full resize-none"
+                                    rows={5}
+                                />
+                            </div>
+                        ) : selectedTaskDetails?.description ? (
+                            <div className="space-y-2">
+                                <h4 className="text-sm font-medium">Description</h4>
+                                <p className="text-sm text-muted-foreground whitespace-pre-wrap">{selectedTaskDetails.description}</p>
+                            </div>
+                        ) : (
+                            <p className="text-sm text-muted-foreground">No description provided.</p>
+                        )}
+                    </div>
+
+                    <DialogFooter className="flex justify-between sm:justify-end">
+                        {isEditingTask ? (
+                            <>
+                                <Button variant="outline" onClick={cancelEditingTask} className="mr-2">
+                                    <X className="h-4 w-4 mr-2" />
+                                    Cancel
+                                </Button>
+                                <Button onClick={saveEditedTask} disabled={!editedTitle.trim()}>
+                                    <Save className="h-4 w-4 mr-2" />
+                                    Save
+                                </Button>
+                            </>
+                        ) : (
+                            <>
+                                <Button variant="outline" onClick={() => setIsTaskDetailsDialogOpen(false)} className="mr-2">
+                                    Close
+                                </Button>
+                                <Button onClick={startEditingTask}>
+                                    <Pencil className="h-4 w-4 mr-2" />
+                                    Edit
+                                </Button>
+                            </>
+                        )}
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
             {/* Task Frequency Dialog */}
             <Dialog open={isFrequencyDialogOpen} onOpenChange={setIsFrequencyDialogOpen}>
                 <DialogContent>
                     <DialogHeader>
                         <DialogTitle>Set Task Details</DialogTitle>
-                        <DialogDescription>Enter time and select days for this task.</DialogDescription>
+                        <DialogDescription>Enter time, description, and select days for this task.</DialogDescription>
                     </DialogHeader>
 
                     <div className="py-4 space-y-4">
@@ -408,6 +578,21 @@ export default function TaskManager() {
                                 className="w-full"
                             />
                             <p className="text-xs text-muted-foreground">Enter time in 24-hour format (HH:MM)</p>
+                        </div>
+
+                        {/* Description input */}
+                        <div className="space-y-2">
+                            <label htmlFor="task-description" className="text-sm font-medium">
+                                Description (optional)
+                            </label>
+                            <Textarea
+                                id="task-description"
+                                placeholder="Add details about this task..."
+                                value={taskDescription}
+                                onChange={(e) => setTaskDescription(e.target.value)}
+                                className="w-full resize-none"
+                                rows={3}
+                            />
                         </div>
 
                         {/* Day selection */}
